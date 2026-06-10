@@ -1,1 +1,773 @@
-# Tank-Evolution
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Diep.io Mega Arena - Kusursuz Versiyon</title>
+    <style>
+        :root {
+            --bg-color: #b4b4b4;
+            --grid-color: #ababab;
+            --panel-bg: rgba(60, 60, 60, 0.9);
+            --border-color: #454545;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: #ffffff;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+            height: 100vh;
+            width: 100vw;
+            user-select: none;
+        }
+
+        #game-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+        }
+
+        canvas {
+            display: block;
+        }
+
+        .hud {
+            position: absolute;
+            pointer-events: none;
+            z-index: 10;
+            font-weight: 800;
+            text-shadow: 2px 2px 0px #000;
+        }
+
+        #bottom-center {
+            bottom: 25px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .bar-container {
+            width: 380px;
+            height: 22px;
+            background: #444;
+            border: 3px solid #252525;
+            border-radius: 6px;
+            overflow: hidden;
+            position: relative;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+        }
+
+        .bar-fill {
+            height: 100%;
+            width: 0%;
+            transition: width 0.05s linear;
+        }
+
+        #hp-bar { background: linear-gradient(90deg, #74d96c, #85e37d); }
+        #exp-bar { background: linear-gradient(90deg, #e6c229, #ffd966); }
+
+        .bar-text {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            text-align: center;
+            font-size: 13px;
+            line-height: 16px;
+            color: #fff;
+        }
+
+        #tank-info {
+            font-size: 20px;
+            color: #ffffff;
+            letter-spacing: 1px;
+        }
+
+        #leaderboard {
+            top: 15px;
+            right: 15px;
+            background: var(--panel-bg);
+            border: 3px solid var(--border-color);
+            border-radius: 8px;
+            padding: 12px;
+            width: 240px;
+            box-shadow: 0 6px 16px rgba(0,0,0,0.4);
+        }
+
+        #leaderboard h3 {
+            text-align: center;
+            margin-bottom: 10px;
+            font-size: 16px;
+            color: #ffd966;
+            border-bottom: 2px solid var(--border-color);
+            padding-bottom: 6px;
+            text-transform: uppercase;
+        }
+
+        .lb-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 14px;
+            margin: 5px 0;
+            padding: 2px 4px;
+        }
+
+        .lb-row.player { 
+            color: #00ffff; 
+            background: rgba(0, 178, 225, 0.2);
+            border-radius: 4px;
+        }
+
+        /* Giriş ve Ölüm Ekranı */
+        #overlay {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(20, 20, 20, 0.85);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 20;
+            pointer-events: auto;
+            transition: opacity 0.2s ease;
+        }
+
+        #overlay.hidden {
+            display: none !important;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        #overlay h1 { font-size: 54px; margin-bottom: 15px; color: #00b2e1; letter-spacing: 4px; }
+        #overlay p { font-size: 16px; margin-bottom: 30px; color: #ccc; }
+        
+        #start-btn {
+            background: #85e37d;
+            border: 4px solid #5da357;
+            padding: 16px 50px;
+            font-size: 24px;
+            font-weight: bold;
+            color: white;
+            border-radius: 30px;
+            cursor: pointer;
+            box-shadow: 0 6px 0 #467a41;
+            text-shadow: 1px 1px 0 #000;
+            transition: transform 0.1s, background-color 0.1s;
+        }
+        #start-btn:hover { background: #96eb8f; }
+        #start-btn:active { transform: translateY(4px); box-shadow: 0 2px 0 #467a41; }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <div id="overlay">
+            <h1 id="title">DIEP.IO MEGA</h1>
+            <p id="subtitle">Şekilleri ve rakipleri vurarak 20 farklı seviyede evrimleş!</p>
+            <button id="start-btn">Savaşa Katıl</button>
+        </div>
+
+        <div id="leaderboard" class="hud">
+            <h3>Sıralama</h3>
+            <div id="lb-content"></div>
+        </div>
+
+        <div id="bottom-center" class="hud">
+            <div id="tank-info">Seviye 1: Temel Tank</div>
+            <div class="bar-container">
+                <div id="hp-bar" class="bar-fill"></div>
+                <div class="bar-text" id="hp-text">HP: 100 / 100</div>
+            </div>
+            <div class="bar-container">
+                <div id="exp-bar" class="bar-fill"></div>
+                <div class="bar-text" id="exp-text">Deneyim: 0 / 100</div>
+            </div>
+        </div>
+
+        <canvas id="gameCanvas"></canvas>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        const WORLD_SIZE = 4000; 
+        let gameRunning = false;
+
+        const keys = { w: false, a: false, s: false, d: false };
+        let mouse = { x: 0, y: 0, down: false };
+
+        let player = null;
+        let bullets = [];
+        let shapes = [];
+        let bots = [];
+
+        const BOT_NAMES = ["Stalker", "Overlord", "Destroyer", "Skimmer", "Booster", "Sprayer", "Predator", "Annihilator", "Auto-5", "Gunner", "Streamliner"];
+
+        const EVOLUTION_STAGES = [
+            { lvl: 1,  name: "Temel Tank",      radius: 18, color: "#00b2e1", bColor: "#f14e54", fireDelay: 38, bSpeed: 6.5, bDamage: 15,  bLife: 60,  type: "single" },
+            { lvl: 2,  name: "Hafif İkiz",      radius: 20, color: "#1ecee6", bColor: "#f36368", fireDelay: 34, bSpeed: 6.8, bDamage: 12,  bLife: 60,  type: "twin_narrow" },
+            { lvl: 3,  name: "Geniş Avcı",      radius: 22, color: "#3ae2ce", bColor: "#f67b7e", fireDelay: 42, bSpeed: 7.5, bDamage: 20, bLife: 65,  type: "single_long" },
+            { lvl: 4,  name: "Üçlü Atıcı",      radius: 24, color: "#2ecc71", bColor: "#e74c3c", fireDelay: 36, bSpeed: 6.5, bDamage: 14,  bLife: 60,  type: "triple" },
+            { lvl: 5,  name: "Hızlı Taramalı",  radius: 26, color: "#27ae60", bColor: "#c0392b", fireDelay: 20, bSpeed: 6.0, bDamage: 9,   bLife: 50,  type: "spray" },
+            { lvl: 6,  name: "Flank Koruyucu",  radius: 28, color: "#1abc9c", bColor: "#d35400", fireDelay: 32, bSpeed: 7.0, bDamage: 16,  bLife: 60,  type: "flank" },
+            { lvl: 7,  name: "Dörtlü Kuşatma",  radius: 30, color: "#16a085", bColor: "#e67e22", fireDelay: 38, bSpeed: 6.8, bDamage: 15,  bLife: 60,  type: "quad" },
+            { lvl: 8,  name: "Ağır Topçu",      radius: 32, color: "#f1c40f", bColor: "#9b59b6", fireDelay: 55, bSpeed: 5.5, bDamage: 35,  bLife: 75,  type: "heavy" },
+            { lvl: 9,  name: "Sniper Gözcü",    radius: 34, color: "#f39c12", bColor: "#8e44ad", fireDelay: 68, bSpeed: 10.5, bDamage: 48, bLife: 85,  type: "sniper" },
+            { lvl: 10, name: "Gatling Canavarı", radius: 36, color: "#e67e22", bColor: "#34495e", fireDelay: 15, bSpeed: 7.0, bDamage: 8,   bLife: 45,  type: "spray_fast" },
+            { lvl: 11, name: "Arka Hücumcu",    radius: 38, color: "#d35400", bColor: "#2c3e50", fireDelay: 30, bSpeed: 7.0, bDamage: 18,  bLife: 60,  type: "flank_heavy" },
+            { lvl: 12, name: "Altılı Savaşçı",  radius: 40, color: "#e74c3c", bColor: "#27ae60", fireDelay: 44, bSpeed: 6.5, bDamage: 18,  bLife: 55,  type: "hexa" },
+            { lvl: 13, name: "Yıkıcı Top",      radius: 42, color: "#c0392b", bColor: "#2ecc71", fireDelay: 85, bSpeed: 4.8, bDamage: 80,  bLife: 95, type: "destroyer" },
+            { lvl: 14, name: "Suikastçı",       radius: 44, color: "#9b59b6", bColor: "#1abc9c", fireDelay: 78, bSpeed: 12.0, bDamage: 70, bLife: 100, type: "sniper_pro" },
+            { lvl: 15, name: "Vanguard",        radius: 46, color: "#8e44ad", bColor: "#16a085", fireDelay: 26, bSpeed: 7.5, bDamage: 22, bLife: 65,  type: "twin_heavy" },
+            { lvl: 16, name: "Bölge Hakimi",    radius: 48, color: "#34495e", bColor: "#f1c40f", fireDelay: 38, bSpeed: 7.5, bDamage: 24, bLife: 70,  type: "quad_heavy" },
+            { lvl: 17, name: "Overkill",        radius: 51, color: "#2c3e50", bColor: "#f39c12", fireDelay: 16, bSpeed: 8.0, bDamage: 14, bLife: 55,  type: "spray_ultra" },
+            { lvl: 18, name: "Kıyamet Silahı",  radius: 54, color: "#111111", bColor: "#ff0055", fireDelay: 100, bSpeed: 4.5, bDamage: 140, bLife: 110, type: "apocalypse" },
+            { lvl: 19, name: "Titan Muhafız",   radius: 58, color: "#ffd700", bColor: "#4a00e0", fireDelay: 32, bSpeed: 8.5, bDamage: 40, bLife: 80,  type: "titan_cross" },
+            { lvl: 20, name: "Ebedi Arenanın İlahı", radius: 64, color: "#ffffff", bColor: "#000000", fireDelay: 20, bSpeed: 9.0, bDamage: 32, bLife: 75,  type: "god_octa" }
+        ];
+
+        function resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        window.addEventListener('keydown', e => { if(e.key.toLowerCase() in keys) keys[e.key.toLowerCase()] = true; });
+        window.addEventListener('keyup', e => { if(e.key.toLowerCase() in keys) keys[e.key.toLowerCase()] = false; });
+        window.addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; });
+        window.addEventListener('mousedown', e => { if(e.button === 0) mouse.down = true; });
+        window.addEventListener('mouseup', e => { if(e.button === 0) mouse.down = false; });
+
+        class Tank {
+            constructor(x, y, name, isBot = false) {
+                this.x = x;
+                this.y = y;
+                this.name = name;
+                this.isBot = isBot;
+                
+                this.level = 1;
+                this.score = 0;
+                this.hp = 100;
+                this.maxHp = 100;
+                this.speed = 3.2;
+                this.angle = 0;
+                this.reloadTimer = 0;
+                this.hpRegen = 0.08;
+                this.dead = false;
+
+                this.syncStageProperties();
+
+                if (this.isBot) {
+                    this.aiTargetX = Math.random() * WORLD_SIZE;
+                    this.aiTargetY = Math.random() * WORLD_SIZE;
+                    this.aiTimer = 0;
+                }
+            }
+
+            syncStageProperties() {
+                const stage = EVOLUTION_STAGES[Math.min(this.level - 1, EVOLUTION_STAGES.length - 1)];
+                this.radius = stage.radius;
+                this.baseColor = this.isBot ? stage.bColor : stage.color;
+                this.strokeColor = "#3a3a3a";
+                this.fireDelay = stage.fireDelay;
+                this.bSpeed = stage.bSpeed;
+                this.bDamage = stage.bDamage;
+                this.bLife = stage.bLife;
+                this.stageName = stage.name;
+                this.weaponType = stage.type;
+                
+                // DÜZELTME BÖLGESİ: Yeni seviyede Max HP artarken, can barının görsel olarak aniden 
+                // yarıya düşmesini engellemek ve seviye atlamayı ödüllendirmek için canı FULLÜYORUZ!
+                this.maxHp = 100 + (this.level * 20);
+                this.hp = this.maxHp;
+
+                this.speed = Math.max(1.6, 3.4 - (this.level * 0.09));
+            }
+
+            update() {
+                if (this.hp < this.maxHp) {
+                    this.hp = Math.min(this.maxHp, this.hp + this.hpRegen);
+                }
+
+                if (!this.isBot) {
+                    let mx = 0, my = 0;
+                    if (keys.w) my -= 1;
+                    if (keys.s) my += 1;
+                    if (keys.a) mx -= 1;
+                    if (keys.d) mx += 1;
+
+                    if (mx !== 0 || my !== 0) {
+                        const mag = Math.hypot(mx, my);
+                        this.x += (mx / mag) * this.speed;
+                        this.y += (my / mag) * this.speed;
+                    }
+
+                    const cx = canvas.width / 2;
+                    const cy = canvas.height / 2;
+                    this.angle = Math.atan2(mouse.y - cy, mouse.x - cx);
+
+                    if (mouse.down && this.reloadTimer <= 0) {
+                        this.fireWeapon();
+                    }
+                } else {
+                    this.aiTimer--;
+                    if (this.aiTimer <= 0) {
+                        let nearestTarget = null;
+                        let recordDist = 600;
+
+                        shapes.forEach(s => {
+                            let d = Math.hypot(s.x - this.x, s.y - this.y);
+                            if (d < recordDist) { recordDist = d; nearestTarget = s; }
+                        });
+
+                        let dToPlayer = Math.hypot(player.x - this.x, player.y - this.y);
+                        if (dToPlayer < recordDist && !player.dead) {
+                            nearestTarget = player;
+                        }
+
+                        if (nearestTarget) {
+                            this.aiTargetX = nearestTarget.x;
+                            this.aiTargetY = nearestTarget.y;
+                            if (Math.random() < 0.65) this.fireWeapon();
+                        } else if (Math.random() < 0.01) {
+                            this.aiTargetX = Math.random() * WORLD_SIZE;
+                            this.aiTargetY = Math.random() * WORLD_SIZE;
+                        }
+                        this.aiTimer = Math.floor(Math.random() * 30) + 20;
+                    }
+
+                    let dx = this.aiTargetX - this.x;
+                    let dy = this.aiTargetY - this.y;
+                    let dist = Math.hypot(dx, dy);
+                    if (dist > 20) {
+                        this.x += (dx / dist) * this.speed;
+                        this.y += (dy / dist) * this.speed;
+                        this.angle = Math.atan2(dy, dx);
+                    }
+                }
+
+                this.x = Math.max(this.radius, Math.min(WORLD_SIZE - this.radius, this.x));
+                this.y = Math.max(this.radius, Math.min(WORLD_SIZE - this.radius, this.y));
+
+                if (this.reloadTimer > 0) this.reloadTimer--;
+            }
+
+            fireWeapon() {
+                this.reloadTimer = this.fireDelay;
+                const type = this.weaponType;
+
+                if (type === "single" || type === "heavy" || type === "sniper" || type === "single_long" || type === "sniper_pro" || type === "destroyer" || type === "apocalypse") {
+                    let len = type.includes("long") || type.includes("sniper") ? 1.5 : 1.25;
+                    this.createBullet(this.angle, len);
+                } 
+                else if (type === "twin_narrow" || type === "twin_heavy") {
+                    let offset = type === "twin_heavy" ? 12 : 7;
+                    this.createBullet(this.angle, 1.2, Math.cos(this.angle + Math.PI/2) * offset, Math.sin(this.angle + Math.PI/2) * offset);
+                    this.createBullet(this.angle, 1.2, -Math.cos(this.angle + Math.PI/2) * offset, -Math.sin(this.angle + Math.PI/2) * offset);
+                } 
+                else if (type === "triple") {
+                    this.createBullet(this.angle, 1.2);
+                    this.createBullet(this.angle + 0.26, 1.15);
+                    this.createBullet(this.angle - 0.26, 1.15);
+                } 
+                else if (type === "spray" || type === "spray_fast" || type === "spray_ultra") {
+                    let spread = (Math.random() - 0.5) * 0.35;
+                    this.createBullet(this.angle + spread, 1.1);
+                } 
+                else if (type === "flank" || type === "flank_heavy") {
+                    this.createBullet(this.angle, 1.25);
+                    this.createBullet(this.angle + Math.PI, 1.1);
+                } 
+                else if (type === "quad" || type === "quad_heavy") {
+                    for(let i=0; i<4; i++) this.createBullet(this.angle + (Math.PI/2)*i, 1.2);
+                } 
+                else if (type === "hexa") {
+                    for(let i=0; i<6; i++) this.createBullet(this.angle + (Math.PI/3)*i, 1.2);
+                }
+                else if (type === "titan_cross") {
+                    this.createBullet(this.angle, 1.4);
+                    this.createBullet(this.angle + Math.PI/2, 1.2);
+                    this.createBullet(this.angle - Math.PI/2, 1.2);
+                    this.createBullet(this.angle + Math.PI, 1.2);
+                }
+                else if (type === "god_octa") {
+                    for(let i=0; i<8; i++) this.createBullet(this.angle + (Math.PI/4)*i, 1.3);
+                }
+            }
+
+            createBullet(ang, lengthMult, spawnOffX = 0, spawnOffY = 0) {
+                let bRadius = 6.5 + (this.level * 0.35);
+                if (this.weaponType === "destroyer") bRadius = 17;
+                if (this.weaponType === "apocalypse") bRadius = 24;
+
+                bullets.push({
+                    x: this.x + spawnOffX + Math.cos(ang) * (this.radius * lengthMult),
+                    y: this.y + spawnOffY + Math.sin(ang) * (this.radius * lengthMult),
+                    vx: Math.cos(ang) * this.bSpeed,
+                    vy: Math.sin(ang) * this.bSpeed,
+                    damage: this.bDamage,
+                    radius: bRadius,
+                    life: this.bLife,
+                    owner: this
+                });
+            }
+
+            earnScore(pts) {
+                if(this.dead) return;
+                this.score += pts;
+                
+                let calculatedLevel = 1;
+                for (let i = 1; i <= 20; i++) {
+                    let req = Math.pow(i, 2.15) * 70;
+                    if (this.score >= req) {
+                        calculatedLevel = i + 1;
+                    } else {
+                        break;
+                    }
+                }
+                calculatedLevel = Math.min(20, calculatedLevel);
+
+                if (calculatedLevel > this.level) {
+                    this.level = calculatedLevel;
+                    this.syncStageProperties();
+                    if (!this.isBot) {
+                        document.getElementById('tank-info').textContent = `Seviye ${this.level}: ${this.stageName}`;
+                    }
+                }
+            }
+
+            draw(ox, oy) {
+                const sx = this.x - ox;
+                const sy = this.y - oy;
+
+                if (sx < -120 || sx > canvas.width + 120 || sy < -120 || sy > canvas.height + 120) return;
+
+                ctx.save();
+                ctx.translate(sx, sy);
+                ctx.rotate(this.angle);
+
+                ctx.fillStyle = "#999999";
+                ctx.strokeStyle = "#454545";
+                ctx.lineWidth = 4;
+
+                const renderBarrel = (w, h, rot = 0, syOff = 0) => {
+                    ctx.save();
+                    ctx.rotate(rot);
+                    ctx.fillRect(0, -h/2 + syOff, w, h);
+                    ctx.strokeRect(0, -h/2 + syOff, w, h);
+                    ctx.restore();
+                };
+
+                const type = this.weaponType;
+                const rad = this.radius;
+
+                if (type === "single") renderBarrel(rad * 1.35, rad * 0.75);
+                else if (type === "single_long") renderBarrel(rad * 1.7, rad * 0.7);
+                else if (type === "heavy") renderBarrel(rad * 1.3, rad * 0.95);
+                else if (type === "sniper") renderBarrel(rad * 1.9, rad * 0.65);
+                else if (type === "sniper_pro") renderBarrel(rad * 2.2, rad * 0.6);
+                else if (type === "destroyer") renderBarrel(rad * 1.4, rad * 1.2);
+                else if (type === "apocalypse") renderBarrel(rad * 1.5, rad * 1.4);
+                else if (type === "twin_narrow") {
+                    renderBarrel(rad * 1.3, rad * 0.45, 0, -rad*0.3);
+                    renderBarrel(rad * 1.3, rad * 0.45, 0, rad*0.3);
+                }
+                else if (type === "twin_heavy") {
+                    renderBarrel(rad * 1.4, rad * 0.55, 0, -rad*0.35);
+                    renderBarrel(rad * 1.4, rad * 0.55, 0, rad*0.35);
+                }
+                else if (type === "triple") {
+                    renderBarrel(rad * 1.3, rad * 0.55, 0);
+                    renderBarrel(rad * 1.2, rad * 0.55, 0.26);
+                    renderBarrel(rad * 1.2, rad * 0.55, -0.26);
+                }
+                else if (type === "spray" || type === "spray_fast" || type === "spray_ultra") {
+                    ctx.beginPath();
+                    ctx.moveTo(0, -rad*0.3);
+                    ctx.lineTo(rad*1.35, -rad*0.6);
+                    ctx.lineTo(rad*1.35, rad*0.6);
+                    ctx.lineTo(0, rad*0.3);
+                    ctx.closePath(); ctx.fill(); ctx.stroke();
+                }
+                else if (type === "flank" || type === "flank_heavy") {
+                    renderBarrel(rad * 1.35, rad * 0.7);
+                    renderBarrel(rad * 1.1, rad * 0.7, Math.PI);
+                }
+                else if (type === "quad" || type === "quad_heavy") {
+                    for(let i=0; i<4; i++) renderBarrel(rad * 1.3, rad * 0.65, (Math.PI/2)*i);
+                }
+                else if (type === "hexa") {
+                    for(let i=0; i<6; i++) renderBarrel(rad * 1.2, rad * 0.55, (Math.PI/3)*i);
+                }
+                else if (type === "titan_cross") {
+                    renderBarrel(rad * 1.5, rad * 0.75, 0);
+                    renderBarrel(rad * 1.25, rad * 0.65, Math.PI/2);
+                    renderBarrel(rad * 1.25, rad * 0.65, -Math.PI/2);
+                    renderBarrel(rad * 1.25, rad * 0.65, Math.PI);
+                }
+                else if (type === "god_octa") {
+                    for(let i=0; i<8; i++) renderBarrel(rad * 1.35, rad * 0.5, (Math.PI/4)*i);
+                }
+
+                ctx.restore();
+
+                ctx.fillStyle = this.baseColor;
+                ctx.strokeStyle = this.strokeColor;
+                ctx.lineWidth = 4;
+                ctx.beginPath();
+                ctx.arc(sx, sy, this.radius, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+
+                ctx.fillStyle = "#ffffff";
+                ctx.font = "bold 13px sans-serif";
+                ctx.textAlign = "center";
+                ctx.shadowColor = "#000000"; ctx.shadowBlur = 4;
+                ctx.fillText(`${this.name} (Lvl.${this.level})`, sx, sy - this.radius - 10);
+                ctx.shadowBlur = 0;
+            }
+        }
+
+        class Shape {
+            constructor() { this.spawn(); }
+            spawn() {
+                this.x = Math.random() * WORLD_SIZE;
+                this.y = Math.random() * WORLD_SIZE;
+                const r = Math.random();
+                if (r < 0.6) {
+                    this.type = "square"; this.sides = 4; this.radius = 12; this.hp = 12; this.reward = 25; this.color = "#ffe763"; this.stroke = "#bfae4a";
+                } else if (r < 0.88) {
+                    this.type = "triangle"; this.sides = 3; this.radius = 16; this.hp = 30; this.reward = 60; this.color = "#fc7676"; this.stroke = "#bd5959";
+                } else {
+                    this.type = "pentagon"; this.sides = 5; this.radius = 26; this.hp = 120; this.reward = 200; this.color = "#768cfc"; this.stroke = "#596abd";
+                }
+                this.angle = Math.random() * Math.PI;
+                this.rotSpeed = (Math.random() - 0.5) * 0.02;
+            }
+            update() { this.angle += this.rotSpeed; }
+            draw(ox, oy) {
+                const sx = this.x - ox; const sy = this.y - oy;
+                if (sx < -40 || sx > canvas.width + 40 || sy < -40 || sy > canvas.height + 40) return;
+                ctx.save(); ctx.translate(sx, sy); ctx.rotate(this.angle);
+                ctx.fillStyle = this.color; ctx.strokeStyle = this.stroke; ctx.lineWidth = 3;
+                ctx.beginPath();
+                for (let i = 0; i < this.sides; i++) {
+                    let a = (Math.PI * 2 / this.sides) * i;
+                    ctx.lineTo(Math.cos(a) * this.radius, Math.sin(a) * this.radius);
+                }
+                ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.restore();
+            }
+        }
+
+        function buildMatch() {
+            player = new Tank(WORLD_SIZE / 2, WORLD_SIZE / 2, "Kahraman", false);
+            bullets = []; shapes = []; bots = [];
+
+            for (let i = 0; i < 300; i++) shapes.push(new Shape());
+            for (let i = 0; i < 15; i++) {
+                spawnBot();
+            }
+
+            document.getElementById('tank-info').textContent = "Seviye 1: Temel Tank";
+            
+            const overlay = document.getElementById('overlay');
+            overlay.classList.add('hidden'); 
+
+            gameRunning = true;
+            requestAnimationFrame(gameLoop);
+        }
+
+        function spawnBot() {
+            let name = BOT_NAMES[Math.floor(Math.random() * BOT_NAMES.length)] + " [" + Math.floor(Math.random()*90+10) + "]";
+            let bot = new Tank(Math.random() * WORLD_SIZE, Math.random() * WORLD_SIZE, name, true);
+            bot.earnScore(Math.random() * 2000); 
+            bots.push(bot);
+        }
+
+        function sortLeaderboard() {
+            let list = [player, ...bots];
+            list.sort((first, second) => second.score - first.score);
+            const box = document.getElementById('lb-content');
+            box.innerHTML = '';
+            list.slice(0, 8).forEach(t => {
+                const row = document.createElement('div');
+                row.className = 'lb-row' + (!t.isBot ? ' player' : '');
+                row.innerHTML = `<span>${t.name}</span><span>${Math.floor(t.score)}</span>`;
+                box.appendChild(row);
+            });
+        }
+
+        function checkBoundingCollision(obj1, obj2) {
+            const distance = Math.hypot(obj1.x - obj2.x, obj1.y - obj2.y);
+            return distance < (obj1.radius + obj2.radius);
+        }
+
+        function gameLoop() {
+            if (!gameRunning) return;
+
+            ctx.fillStyle = "#b4b4b4";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            let ox = player.x - canvas.width / 2;
+            let oy = player.y - canvas.height / 2;
+            ox = Math.max(0, Math.min(WORLD_SIZE - canvas.width, ox));
+            oy = Math.max(0, Math.min(WORLD_SIZE - canvas.height, oy));
+
+            ctx.strokeStyle = "#ababab"; ctx.lineWidth = 1;
+            const step = 45;
+            for (let x = Math.floor(ox / step) * step; x < ox + canvas.width + step; x += step) {
+                ctx.beginPath(); ctx.moveTo(x - ox, 0); ctx.lineTo(x - ox, canvas.height); ctx.stroke();
+            }
+            for (let y = Math.floor(oy / step) * step; y < oy + canvas.height + step; y += step) {
+                ctx.beginPath(); ctx.moveTo(0, y - oy); ctx.lineTo(canvas.width, y - oy); ctx.stroke();
+            }
+
+            player.update();
+            bots.forEach(b => b.update());
+            shapes.forEach(s => s.update());
+
+            for (let i = bullets.length - 1; i >= 0; i--) {
+                let b = bullets[i];
+                b.x += b.vx;
+                b.y += b.vy;
+                b.life--;
+
+                if (b.life <= 0 || b.x < 0 || b.x > WORLD_SIZE || b.y < 0 || b.y > WORLD_SIZE) {
+                    bullets.splice(i, 1);
+                    continue;
+                }
+
+                ctx.fillStyle = b.owner.isBot ? "#f14e54" : "#00b2e1";
+                ctx.strokeStyle = "#333333"; ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.arc(b.x - ox, b.y - oy, b.radius, 0, Math.PI * 2);
+                ctx.fill(); ctx.stroke();
+            }
+
+            // 1. Mermiler -> Şekiller
+            for (let i = bullets.length - 1; i >= 0; i--) {
+                let b = bullets[i];
+                for (let j = shapes.length - 1; j >= 0; j--) {
+                    let s = shapes[j];
+                    if (checkBoundingCollision(b, s)) {
+                        s.hp -= b.damage;
+                        bullets.splice(i, 1);
+                        if (s.hp <= 0) {
+                            b.owner.earnScore(s.reward);
+                            shapes.splice(j, 1);
+                            shapes.push(new Shape());
+                        }
+                        break;
+                    }
+                }
+            }
+
+            // 2. Mermiler -> Tanklar
+            let activeTanks = [player, ...bots];
+            for (let i = bullets.length - 1; i >= 0; i--) {
+                let b = bullets[i];
+                for (let t of activeTanks) {
+                    if (b.owner !== t && !t.dead && checkBoundingCollision(b, t)) {
+                        t.hp -= b.damage;
+                        bullets.splice(i, 1);
+
+                        if (t.hp <= 0) {
+                            t.dead = true;
+                            b.owner.earnScore(t.score * 0.35 + 300);
+                            
+                            if (t === player) {
+                                triggerGameOver();
+                                return;
+                            } else {
+                                let index = bots.indexOf(t);
+                                if (index > -1) {
+                                    bots.splice(index, 1);
+                                    spawnBot();
+                                }
+                            }
+                        }
+                        break;
+                    }
+                }
+            }
+
+            // 3. Gövde Teması
+            activeTanks.forEach(t => {
+                if (t.dead) return;
+                for (let i = shapes.length - 1; i >= 0; i--) {
+                    let s = shapes[i];
+                    if (checkBoundingCollision(t, s)) {
+                        t.hp -= (s.type === "pentagon" ? 2.5 : 1.0);
+                        s.hp -= 5;
+                        if (s.hp <= 0) {
+                            t.earnScore(s.reward);
+                            shapes.splice(i, 1);
+                            shapes.push(new Shape());
+                        }
+                        if (t === player && player.hp <= 0) {
+                            triggerGameOver();
+                        } else if (t.isBot && t.hp <= 0) {
+                            t.dead = true;
+                            let index = bots.indexOf(t);
+                            if (index > -1) {
+                                bots.splice(index, 1);
+                                spawnBot();
+                            }
+                        }
+                    }
+                }
+            });
+
+            shapes.forEach(s => s.draw(ox, oy));
+            bots.forEach(b => { if(!b.dead) b.draw(ox, oy); });
+            if (!player.dead) player.draw(ox, oy);
+
+            if (!player.dead) {
+                let currentLvlIndex = Math.min(player.level - 1, EVOLUTION_STAGES.length - 1);
+                let currentLvlReq = Math.pow(currentLvlIndex, 2.15) * 70;
+                let nextLvlReq = Math.pow(player.level, 2.15) * 70;
+                
+                let progress = ((player.score - currentLvlReq) / (nextLvlReq - currentLvlReq)) * 100;
+                if(player.level === 20) progress = 100;
+
+                document.getElementById('hp-bar').style.width = `${(player.hp / player.maxHp) * 100}%`;
+                document.getElementById('hp-text').textContent = `HP: ${Math.floor(player.hp)} / ${player.maxHp}`;
+                
+                document.getElementById('exp-bar').style.width = `${Math.max(0, Math.min(100, progress))}%`;
+                document.getElementById('exp-text').textContent = `Skor: ${Math.floor(player.score)}`;
+            }
+
+            if (Math.floor(Math.random() * 25) === 0) sortLeaderboard();
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        function triggerGameOver() {
+            player.dead = true;
+            gameRunning = false;
+            
+            const overlay = document.getElementById('overlay');
+            document.getElementById('title').textContent = "ELENDİNİZ!";
+            document.getElementById('subtitle').textContent = `Son Seviye: ${player.level} | Skorunuz: ${Math.floor(player.score)}`;
+            document.getElementById('start-btn').textContent = "Yeniden Doğ";
+            
+            overlay.classList.remove('hidden');
+        }
+
+        document.getElementById('start-btn').addEventListener('click', () => {
+            buildMatch();
+        });
+    </script>
+</body>
+</html>
